@@ -14,7 +14,8 @@
 
 std::queue<thread::impl*> ready_queue;             
 std::queue<thread::impl*> idle_queue;               
-std::set<cpu*> suspended_set;                       
+std::set<cpu*> suspended_set;
+thread::impl* last_free_thread = nullptr;                       
 
 /*
 // actually libcpu has this
@@ -79,6 +80,7 @@ class thread::impl {
 public:
     impl(thread* p_, thread_startfunc_t fn, void* arg);
     static void thread_start(void(*fn)(void*), void* arg);
+    ~impl();
 };
 
 class cpu::impl {
@@ -107,6 +109,8 @@ public:
         } else {
             setcontext(&cur_thd->uc); 
         }
+        delete last_free_thread;
+        last_free_thread = nullptr;
     }
     static thread::impl* current() {
         assert_lib_mutex_locked();
@@ -114,6 +118,7 @@ public:
     }
 };
 
+// boot thread and idle threads are released
 void idle_func(void*) {
     lock();
     while (true) {
@@ -178,6 +183,8 @@ thread::impl::impl(thread* p_, thread_startfunc_t fn, void* arg) {
 }
 
 void thread::impl::thread_start(void(*fn)(void*), void* arg) {
+    delete last_free_thread;
+    last_free_thread = nullptr;
     unlock();
     fn(arg);
     lock();
@@ -190,8 +197,14 @@ void thread::impl::thread_start(void(*fn)(void*), void* arg) {
     }
     if (current_thd->parent != nullptr)
         current_thd->parent->impl_ptr = nullptr;
-    // how to delete
+    last_free_thread = current_thd;
     cpu::impl::run_next();
+}
+
+thread::impl::~impl() {
+    if (parent != nullptr) {
+        parent->impl_ptr = nullptr;
+    }
 }
 
 

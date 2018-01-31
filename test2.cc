@@ -2,7 +2,7 @@
 #include <iostream>
 
 int global_sum = 0;
-int num_threads = 100;
+int num_threads = 10;
 int cop_threads = 0;
 mutex mtx1, mtx2;
 cv cv1;
