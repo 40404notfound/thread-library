@@ -29,6 +29,7 @@ void loop(void *a)
 
 void parent(void *a) {
     intptr_t arg = (intptr_t) a;
+    cout << "parent init" << endl;
 
     mutex1.lock();
     cout << "parent called with arg " << arg << endl;
@@ -40,5 +41,6 @@ void parent(void *a) {
 }
 
 int main() {
+    cout << "boot" << endl;
     cpu::boot(1, (thread_startfunc_t) parent, (void *) 100, false, false, 0);
 }

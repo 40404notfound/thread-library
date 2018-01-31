@@ -2,6 +2,8 @@
 #include <queue>
 #include <set>
 #include <cassert>
+#include <stdexcept>
+#include <cstdlib>
 #include <ucontext.h>
 #include <pthread.h>
 #include <atomic>
@@ -45,6 +47,14 @@ int num_thread_end;                                 // E3BC (actually num of cpu
 std::atomic<bool> is_cpu_boot_called;               // E3C0
 void* setcontext_fn;                                // E3C8 handler of setcontext by dlsym
 void* swapcontext_fn                                // E3D0 handler of swapcontext by dlsym
+
+void* operator new(unsigned int size) {
+    void* p = malloc(size);
+    if (!p) {
+        throw std::runtime_error("OOM");
+    }
+    return p;
+}
 
 struct cpu_infra_s {
     cpu* p_cpu; // 8 bytes
@@ -137,6 +147,7 @@ int64_t infra_rand() {
 }
 
 struct lock_guard {
+public:
     lock_guard() {
         lock();    
     }
@@ -331,7 +342,7 @@ void wakeup_one_cpu() {
 
 thread::thread(void(*f)(void*), void* arg) {
     if (f == nullptr) {
-        throw std::runtime_error("Tried ...");
+        throw std::runtime_error("Tried to construct thread with a null function pointer");
     }
     lock();
     this->impl_ptr = new thread::impl(this, f, arg);
