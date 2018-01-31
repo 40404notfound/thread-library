@@ -1,47 +1,40 @@
-#include <iostream>
-#include <cstdlib>
 #include "thread.h"
+#include <iostream>
+#include <vector>
 
-using namespace std;
-
-int g = 0;
-
-mutex mutex1;
+int global_sum = 0;
+int num_threads = 20;
+int cop_threads = 0;
+mutex mtx1, mtx2;
 cv cv1;
 
-void loop(void *a)
-{
-    char *id = (char *) a;
-    int i;
-
-    mutex1.lock();
-    cout << "loop called with id " << id << endl;
-
-    for (i=0; i<5; i++, g++) {
-	cout << id << ":\t" << i << "\t" << g << endl;
-        mutex1.unlock();
-	thread::yield();
-        mutex1.lock();
-    }
-    cout << id << ":\t" << i << "\t" << g << endl;
-    mutex1.unlock();
+void add(void* s) {
+    mtx2.lock();
+    std::cout << "Add init" << std::endl;
+    global_sum += reinterpret_cast<intptr_t>(s);
+    cop_threads += 1;
+    cv1.signal();
+    std::cout << "Add end" << std::endl;
+    mtx2.unlock();
 }
 
-void parent(void *a) {
-    intptr_t arg = (intptr_t) a;
-    cout << "parent init" << endl;
-
-    mutex1.lock();
-    cout << "parent called with arg " << arg << endl;
-    mutex1.unlock();
-
-    thread t1 ( (thread_startfunc_t) loop, (void *) "child thread");
-
-    loop( (void *) "parent thread");
+void parent(void*) {
+    mtx1.lock();
+    std::cout << "Parent init" << std::endl;
+    std::vector<thread> v;
+    v.reserve(num_threads);
+    for (size_t i = 0; i < num_threads; ++i) {
+        thread thd_add{&add, (void*)i};
+        v.emplace_back(std::move(thd_add));
+    }
+    for (size_t i = 0; i < num_threads; ++i) {
+        v[i].join();
+    }
+    std::cout << "Parent end" << std::endl;
+    std::cout << "Result: " << global_sum << std::endl;
+    mtx1.unlock();
 }
 
 int main() {
-    cout << "boot" << endl;
-    
-    cpu::boot(1, (thread_startfunc_t) parent, (void *) 100, false, false, 0);
+    cpu::boot(4, parent, nullptr, true, true, 2324);
 }

@@ -24,7 +24,7 @@ void parent(void*) {
 void start(void*) {
     thread s1{parent, nullptr};
     thread s2{parent, nullptr};
-    thread s2{child, nullptr};
+    thread s3{child, nullptr};
     thread s4{child, nullptr};
     s1.join();
     s2.join();
