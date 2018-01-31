@@ -172,12 +172,16 @@ void cpu::init(thread_startfunc_t fn, void* arg) {
     assert_lib_mutex_locked();
     // initialize queue pointer
     impl_ptr = new cpu::impl;
-    interrupt_vector_table[CPU::TIMER] = thread_yield;
+    interrupt_vector_table[CPU::TIMER] = ipi_handler;
     interrupt_vector_table[CPU::IPI] = ipi_handler;
+    unlock();
     if (fn) {
         thread cpu_main_thread{fn, arg};
     }
     thread cpu_idle_thread{idle_func, nullptr};
+    lock();
+    interrupt_vector_table[CPU::TIMER] = thread_yield;
+    interrupt_vector_table[CPU::IPI] = ipi_handler;
     cpu::impl::run_next();
     assert(false);
 }

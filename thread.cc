@@ -27,12 +27,14 @@ void* operator new(size_t size) {
 }
 */
 
+void assert_lib_mutex_locked() {
+    // assert_interrupts_private("Test locked", 0, true);
+    // assert(guard.exchange(1));
+}
+
 void lock() {
-    long long res;
     cpu::interrupt_disable();
-    do {
-        res = guard.exchange(1, std::memory_order_seq_cst);
-    } while (res);
+    while(guard.exchange(1, std::memory_order_seq_cst));
 }
 
 void unlock() {
@@ -51,6 +53,7 @@ public:
     }
 };
 
+// [[enter as locked]]
 void wakeup_one_cpu() {
 #ifdef COUT_DEBUG
     std::cout << "wake one\n";
@@ -58,6 +61,7 @@ void wakeup_one_cpu() {
     std::cout << idle_queue.size() << '\n';
     std::cout << suspended_set.size() << '\n';
 #endif
+    assert_lib_mutex_locked();    
     if (!ready_queue.empty() && !suspended_set.empty()) {
         cpu* c = *suspended_set.begin();
         c->interrupt_send();
@@ -86,8 +90,8 @@ public:
         std::cout << ready_queue.size() << '\n';
         std::cout << idle_queue.size() << '\n';
         std::cout << suspended_set.size() << '\n';
-#endif        
-        
+#endif  
+        assert_lib_mutex_locked();
         thread::impl* old_thd = cpu::impl::current();
         thread::impl** cur_thd_p = &cpu::self()->impl_ptr->current_thd;
         if (!ready_queue.empty()) {
@@ -100,12 +104,12 @@ public:
         thread::impl* cur_thd = *cur_thd_p;
         if (old_thd) {
             swapcontext(&old_thd->uc, &cur_thd->uc); 
-            // error handle?
         } else {
             setcontext(&cur_thd->uc); 
         }
     }
     static thread::impl* current() {
+        assert_lib_mutex_locked();
         return cpu::self()->impl_ptr->current_thd;
     }
 };
@@ -117,7 +121,7 @@ void idle_func(void*) {
         idle_queue.push(ti);
         cpu::impl::run_next();
         suspended_set.insert(cpu::self());
-        guard.store(0, std::memory_order_seq_cst); // just unlock
+        guard.store(0, std::memory_order_seq_cst);
         cpu::interrupt_enable_suspend();
         lock();
     }
@@ -139,14 +143,15 @@ void cpu::init(thread_startfunc_t fn, void* arg) {
     while(guard.exchange(1, std::memory_order_seq_cst))
         ;
     impl_ptr = new cpu::impl;
-    interrupt_vector_table[cpu::TIMER] = timer_handler;
+    interrupt_vector_table[cpu::TIMER] = ipi_handler;
     interrupt_vector_table[cpu::IPI] = ipi_handler;
-    unlock();
+    unlock(); // also enable interrupt
     if (fn) {
         thread cpu_main_thread{fn, arg};
     }
     thread cpu_idle_thread{idle_func, nullptr};
     lock();
+    interrupt_vector_table[cpu::TIMER] = timer_handler;
     cpu::impl::run_next();
 }
 
@@ -177,9 +182,7 @@ void thread::impl::thread_start(void(*fn)(void*), void* arg) {
     fn(arg);
     lock();
     auto current_thd = cpu::impl::current();
-    while (true) {
-        if (current_thd->join_thd.empty())
-            break;
+    while (!current_thd->join_thd.empty()) {
         auto parent_thd = current_thd->join_thd.front();
         ready_queue.push(parent_thd);
         wakeup_one_cpu();
@@ -220,6 +223,7 @@ thread& thread::operator=(thread&& other) {
     if (impl_ptr != nullptr) {
         impl_ptr->parent = this;
     }
+    return *this;
 }
 
 void thread::join() {
@@ -231,7 +235,11 @@ void thread::join() {
 }
 
 void thread::yield() {
-    timer_handler();
+    lock_guard gd;
+    if (!ready_queue.empty()) {
+        ready_queue.push(cpu::impl::current());
+        cpu::impl::run_next();
+    }
 }
 
 struct mutex::impl {
@@ -289,13 +297,13 @@ struct cv::impl {
         mtx->lock();
     }
     void signal(bool is_broadcast) {
-        while (is_broadcast == 1) {
+        do {
             if (thd_q.empty())
                 break;
             ready_queue.push(thd_q.front());
             thd_q.pop();
             wakeup_one_cpu();
-        }
+        } while (is_broadcast == 1);
     }
     std::queue<thread::impl*> thd_q; // waiting thread
 };
