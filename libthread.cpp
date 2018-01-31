@@ -222,7 +222,7 @@ struct mutex::impl {
     // push self to cpu::impl::current()->mtx_set
     void lock() {
         assert_lib_mutex_locked();
-        if (is_not_locked || own_thd == nullptr) {
+        if (is_locked || own_thd != nullptr) {
             thd_q.push_back(cpu::impl::current());
             cpu::impl::run_next();
         } else {
@@ -237,7 +237,7 @@ struct mutex::impl {
     // pop 1 and push to ready_queue    
     void unlock() {
         assert_lib_mutex_locked();
-        if (is_not_unlocked || own_thd != cpu::impl::current()) {
+        if (is_locked && own_thd != cpu::impl::current()) {
             throw std::runtime_error("Thread tried to release mutex it didn't own");
         }
         auto cur_thd = cpu::impl::current();
@@ -265,9 +265,9 @@ struct mutex::impl {
         q->impl_ptr = p->impl_ptr;
         p->impl_ptr = nullptr;
     }
-    bool is_not_locked;
-    thread::impl* own_thd; 
-    std::queue<thread::impl*> thd_q; // locked thread
+    bool is_locked = false;
+    thread::impl* own_thd = nullptr; 
+    std::queue<thread::impl*> thd_q; // wait thread
 };
 
 struct cv::impl {
@@ -320,7 +320,7 @@ void idle_func(void*) {
         if (ss != suspended_set.end()) {
             break;
         }
-        cpu* v9 = *ss;
+        cpu* v9 = suspended_set.insert(cpu::self());;
         suspended_set.insert(v9);
         guard.store(0, std::memory_order_seq_cst); // just unlock
         cpu::interrupt_enable_suspend();

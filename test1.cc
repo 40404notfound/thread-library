@@ -42,5 +42,6 @@ void parent(void *a) {
 
 int main() {
     cout << "boot" << endl;
+    
     cpu::boot(1, (thread_startfunc_t) parent, (void *) 100, false, false, 0);
 }

@@ -52,6 +52,12 @@ public:
 };
 
 void wakeup_one_cpu() {
+#ifdef COUT_DEBUG
+    std::cout << "wake one\n";
+    std::cout << ready_queue.size() << '\n';
+    std::cout << idle_queue.size() << '\n';
+    std::cout << suspended_set.size() << '\n';
+#endif
     if (!ready_queue.empty() && !suspended_set.empty()) {
         cpu* c = *suspended_set.begin();
         c->interrupt_send();
@@ -75,8 +81,12 @@ class cpu::impl {
     thread::impl* current_thd = nullptr;
 public:
     static void run_next() {
+#ifdef COUT_DEBUG
+        std::cout << "run_next\n";
         std::cout << ready_queue.size() << '\n';
         std::cout << idle_queue.size() << '\n';
+        std::cout << suspended_set.size() << '\n';
+#endif        
         
         thread::impl* old_thd = cpu::impl::current();
         thread::impl** cur_thd_p = &cpu::self()->impl_ptr->current_thd;
@@ -106,12 +116,7 @@ void idle_func(void*) {
         thread::impl* ti = cpu::impl::current();
         idle_queue.push(ti);
         cpu::impl::run_next();
-        std::set<cpu*>::iterator ss = suspended_set.find(cpu::self());
-        if (ss != suspended_set.end()) {
-            break;
-        }
-        cpu* v9 = *ss;
-        suspended_set.insert(v9);
+        suspended_set.insert(cpu::self());
         guard.store(0, std::memory_order_seq_cst); // just unlock
         cpu::interrupt_enable_suspend();
         lock();
@@ -180,7 +185,7 @@ void thread::impl::thread_start(void(*fn)(void*), void* arg) {
         wakeup_one_cpu();
         current_thd->join_thd.pop();
     }
-    if (current_thd != nullptr)
+    if (current_thd->parent != nullptr)
         current_thd->parent->impl_ptr = nullptr;
     // how to delete
     cpu::impl::run_next();
@@ -231,7 +236,7 @@ void thread::yield() {
 
 struct mutex::impl {
     void lock() {
-        if (is_not_locked || own_thd == nullptr) {
+        if (own_thd != nullptr) {
             thd_q.push(cpu::impl::current());
             cpu::impl::run_next();
         } else {
@@ -239,7 +244,7 @@ struct mutex::impl {
         }
     }
     void unlock() {
-        if (is_not_locked || own_thd != cpu::impl::current()) {
+        if (own_thd != cpu::impl::current()) {
             throw std::runtime_error("Thread tried to release mutex it didn't own");
         }
         auto cur_thd = cpu::impl::current();
@@ -251,7 +256,6 @@ struct mutex::impl {
             wakeup_one_cpu();
         }
     }
-    bool is_not_locked = true;
     thread::impl* own_thd = nullptr; 
     std::queue<thread::impl*> thd_q; // locked thread
 };
