@@ -7,52 +7,15 @@
 // not <exception>
 #include <stdexcept>
 #include <cstdlib>
-#include <type_traits>
 
+// @TODO: setup global memory recycle
 // @TODO: rewrite into transfer lock style instead of assert outer lock style
 // @TODO: move ctor/operator of mutex/cv, so easy(?)
 
-// Actually C++14
-template< bool B, class T = void >
-using enable_if_t = typename std::enable_if<B,T>::type;
-
-// Actually C++17
-// Oops, variable template are only supported after C++14
-// template< class T >
-// inline constexpr bool is_pointer_v = std::is_pointer<T>::value;
-
-template <template <typename ...> class C, typename T, typename = enable_if_t<std::is_pointer<T>::value>>
-class DelOnDtor : public C<T> {
-public:
-    ~DelOnDtor() {
-        C<T>& ctner = static_cast<C<T>&>(*this);
-        for (auto it = ctner.begin(); it != ctner.end(); ++it) {
-            delete *it;
-        }
-    }
-};
-
-template <typename T>
-class DelOnDtor<std::queue, T> : public std::queue<T> {
-public:
-    ~DelOnDtor() {
-        std::queue<T>& ctner = static_cast<std::queue<T>&>(*this);
-        while (!ctner.empty()) {
-            T p = ctner.front();
-            delete p;
-            ctner.pop();
-        }
-    }
-};
-
-
-DelOnDtor<std::queue, thread::impl*> ready_queue;
-DelOnDtor<std::queue, thread::impl*> idle_queue;
-// std::queue<thread::impl*> ready_queue;             
-// std::queue<thread::impl*> idle_queue;               
-std::queue<cpu*> suspended_queue;
-thread::impl* last_free_thread = nullptr;
-
+std::queue<thread::impl*> ready_queue;             
+std::queue<thread::impl*> idle_queue;               
+std::set<cpu*> suspended_set;
+thread::impl* last_free_thread = nullptr;                       
 
 /*
 // actually libcpu has this
@@ -64,6 +27,11 @@ void* operator new(size_t size) {
     return p;
 }
 */
+
+void assert_lib_mutex_locked() {
+    // assert_interrupts_private("Test locked", 0, true);
+    // assert(guard.exchange(1));
+}
 
 void lock() {
     cpu::interrupt_disable();
@@ -94,10 +62,11 @@ void wakeup_one_cpu() {
     std::cout << idle_queue.size() << '\n';
     std::cout << suspended_set.size() << '\n';
 #endif
-    if (!ready_queue.empty() && !suspended_queue.empty()) {
-        cpu* c = suspended_queue.front();
+    assert_lib_mutex_locked();    
+    if (!ready_queue.empty() && !suspended_set.empty()) {
+        cpu* c = *suspended_set.begin();
         c->interrupt_send();
-        suspended_queue.pop();
+        suspended_set.erase(c);
     }
 }
 
@@ -124,6 +93,7 @@ public:
         std::cout << idle_queue.size() << '\n';
         std::cout << suspended_set.size() << '\n';
 #endif  
+        assert_lib_mutex_locked();
         thread::impl* old_thd = cpu::impl::current();
         thread::impl** cur_thd_p = &cpu::self()->impl_ptr->current_thd;
         if (!ready_queue.empty()) {
@@ -143,6 +113,7 @@ public:
         last_free_thread = nullptr;
     }
     static thread::impl* current() {
+        assert_lib_mutex_locked();
         return cpu::self()->impl_ptr->current_thd;
     }
 };
@@ -154,7 +125,7 @@ void idle_func(void*) {
         thread::impl* ti = cpu::impl::current();
         idle_queue.push(ti);
         cpu::impl::run_next();
-        suspended_queue.push(cpu::self());
+        suspended_set.insert(cpu::self());
         guard.store(0, std::memory_order_seq_cst);
         cpu::interrupt_enable_suspend();
         lock();
@@ -162,7 +133,7 @@ void idle_func(void*) {
 }
 
 void timer_handler() {
-    lock_guard lk;
+    lock_guard gd;
     if (!ready_queue.empty()) {
         ready_queue.push(cpu::impl::current());
         cpu::impl::run_next();
@@ -171,14 +142,6 @@ void timer_handler() {
 
 void ipi_handler() {
     // Just a empty implementation is ok.
-}
-
-void atexit_idle_handler() {
-    while (!idle_queue.empty()) {
-        thread::impl* frt = idle_queue.front();
-        idle_queue.pop();
-        delete frt;
-    }
 }
 
 void cpu::init(thread_startfunc_t fn, void* arg) {
@@ -193,19 +156,17 @@ void cpu::init(thread_startfunc_t fn, void* arg) {
     }
     thread cpu_idle_thread{idle_func, nullptr};
     lock();
-    // however, atexit cannot release per thread
-    // atexit(atexit_idle_handler);
     interrupt_vector_table[cpu::TIMER] = timer_handler;
     cpu::impl::run_next();
 }
 
 
 
-thread::impl::impl(thread* p, thread_startfunc_t fn, void* arg) {
+thread::impl::impl(thread* p_, thread_startfunc_t fn, void* arg) {
     if (fn == nullptr) {
         throw std::runtime_error("nullptr function");
     }
-    parent = p;
+    parent = p_;
     getcontext(&uc);
     uc.uc_link = nullptr;
     uc.uc_stack.ss_sp = &stack;
@@ -253,13 +214,14 @@ thread::thread(thread_startfunc_t fn, void* arg) {
 }
 
 thread::~thread() {
-    lock_guard lk;
+    lock_guard gd;
     if (this->impl_ptr != nullptr)
         this->impl_ptr->parent = nullptr;
 }
 
+// operator= is same
 thread::thread(thread&& other) {
-    lock_guard lk;
+    lock_guard gd;
     impl_ptr = other.impl_ptr;
     other.impl_ptr = nullptr;
     if (impl_ptr != nullptr) {
@@ -268,7 +230,7 @@ thread::thread(thread&& other) {
 }
 
 thread& thread::operator=(thread&& other) {
-    lock_guard lk;
+    lock_guard gd;
     impl_ptr = other.impl_ptr;
     other.impl_ptr = nullptr;
     if (impl_ptr != nullptr) {
@@ -278,7 +240,7 @@ thread& thread::operator=(thread&& other) {
 }
 
 void thread::join() {
-    lock_guard lk;
+    lock_guard gd;
     if (this->impl_ptr != nullptr) {
         this->impl_ptr->join_thd.push(cpu::impl::current());
         cpu::impl::run_next();
@@ -286,17 +248,14 @@ void thread::join() {
 }
 
 void thread::yield() {
-    lock_guard lk;
+    lock_guard gd;
     if (!ready_queue.empty()) {
         ready_queue.push(cpu::impl::current());
         cpu::impl::run_next();
     }
 }
 
-class mutex::impl {
-    thread::impl* own_thd = nullptr; 
-    std::queue<thread::impl*> thd_q; // locked thread
-public:
+struct mutex::impl {
     void lock() {
         if (own_thd != nullptr) {
             thd_q.push(cpu::impl::current());
@@ -307,17 +266,19 @@ public:
     }
     void unlock() {
         if (own_thd != cpu::impl::current()) {
-            throw std::runtime_error("release not-own");
+            throw std::runtime_error("Thread tried to release mutex it didn't own");
         }
         auto cur_thd = cpu::impl::current();
         own_thd = nullptr;
         if (!thd_q.empty()) {
-            ready_queue.push(thd_q.front());
             own_thd = thd_q.front();
             thd_q.pop();
+            ready_queue.push(own_thd);
             wakeup_one_cpu();
         }
     }
+    thread::impl* own_thd = nullptr; 
+    std::queue<thread::impl*> thd_q; // locked thread
 };
 
 mutex::mutex() {
@@ -341,29 +302,23 @@ mutex::~mutex() {
 }
 
 
-class cv::impl {
-    std::queue<thread::impl*> thd_q; // waiting thread
-public:
+struct cv::impl {
     void wait(mutex::impl* mtx) {
         mtx->unlock();
         thd_q.push(cpu::impl::current());
         cpu::impl::run_next();
         mtx->lock();
     }
-    void signal() {
-        if (!thd_q.empty()) {
+    void signal(bool is_broadcast) {
+        do {
+            if (thd_q.empty())
+                break;
             ready_queue.push(thd_q.front());
             thd_q.pop();
             wakeup_one_cpu();
-        }
+        } while (is_broadcast == 1);
     }
-    void broadcast() {
-        while (!thd_q.empty()) {
-            ready_queue.push(thd_q.front());
-            thd_q.pop();
-            wakeup_one_cpu();
-        }
-    }
+    std::queue<thread::impl*> thd_q; // waiting thread
 };
 
 cv::cv() {
@@ -378,16 +333,15 @@ cv::~cv() {
 
 void cv::signal() {
     lock_guard lk;
-    impl_ptr->signal();
+    impl_ptr->signal(false);
 }
 
 void cv::broadcast() {
     lock_guard lk;
-    impl_ptr->broadcast();
+    impl_ptr->signal(true);
 }
 
 void cv::wait(mutex& mtx) {
     lock_guard lk;
     impl_ptr->wait(mtx.impl_ptr);
 }
-

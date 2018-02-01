@@ -32,7 +32,7 @@ int context_switch_count;
 // ios_base
 void(*boot_func)(void*);                            // DF18
 void* boot_arg;                                     // DF20
-bool is_cpu_booted;                                 // DF28 (only in helper, should be thread local)
+thread_local bool is_current_cpu_booted;            // DF28 (only in helper, should be thread local)
 cpu_infra_s cpu_infra[16]; // CPUID corresponding interrupt // DF40 - E340
 static std::map<cpu*, int> cpu_to_id;               // E340
 // long padding
@@ -41,7 +41,7 @@ unsigned int num_cpus;                              // E3B0 num of booted (4 or 
 unsigned int num_cpus_inited;                       // E3B4 num of CPU instances
 bool is_cpu_inited;                                 // E3B8
 bool is_cpu_deter;                                  // E3B9
-bool is_cpu_booted;                                 // E3BA set 1 always
+bool is_all_cpu_booted;                             // E3BA set 1 always
 int num_thread_end;                                 // E3BC (actually num of cpu end)
 // end: when cpu call thread_yield 
 std::atomic<bool> is_cpu_boot_called;               // E3C0
