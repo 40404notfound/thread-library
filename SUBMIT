@@ -1,9 +1,17 @@
 thread.cc
+# EHN (useful)
 test1.cc
+# EHIJ (useless)
 test2.cc
+# None (useless)
 test3.cc
+# ABEK (useless)
 test4.cc
+# ABEHK (useful)
 test5.cc
+# ABEF (useful)
 test6.cc
+# None (useless)
 test7.cc
+# BEIJK (useful)
 test8.cc

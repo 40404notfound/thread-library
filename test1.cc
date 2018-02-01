@@ -1,6 +1,7 @@
 #include "thread.h"
 #include <iostream>
 #include <vector>
+// EHN
 
 int global_sum = 0;
 int num_threads = 20;

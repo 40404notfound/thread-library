@@ -1,5 +1,6 @@
 #include "thread.h"
 #include <iostream>
+// EHIJ
 
 int global_sum = 0;
 int num_threads = 25;
