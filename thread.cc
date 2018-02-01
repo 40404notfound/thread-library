@@ -12,6 +12,7 @@
 // @TODO: rewrite into transfer lock style instead of assert outer lock style
 // @TODO: move ctor/operator of mutex/cv, so easy(?)
 
+/*
 // Actually C++14
 template< bool B, class T = void >
 using enable_if_t = typename std::enable_if<B,T>::type;
@@ -48,8 +49,10 @@ public:
 
 DelOnDtor<std::queue, thread::impl*> ready_queue;
 DelOnDtor<std::queue, thread::impl*> idle_queue;
-// std::queue<thread::impl*> ready_queue;             
-// std::queue<thread::impl*> idle_queue;               
+*/
+
+std::queue<thread::impl*> ready_queue;             
+std::queue<thread::impl*> idle_queue;               
 std::queue<cpu*> suspended_queue;
 thread::impl* last_free_thread = nullptr;
 
