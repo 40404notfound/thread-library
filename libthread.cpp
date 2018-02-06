@@ -12,33 +12,53 @@ enum interrrupt_type_t {NEWTHREAD,NONE};
 
 queue<ucontext_t *> ready_threads_ptr;
 queue<cpu*>  suspended_cpu_ptr;
+void timer_handler();
+void ipi_handler();
 
 void ipi_handler()
 {
-    assert(cpu::self()->impl_ptr->interrrupt_type!=NONE);
-    if(cpu::self()->impl_ptr->interrrupt_type==NEWTHREAD)
+    timer_handler();
+}
+
+
+void timer_handler()
+{
+    assert_interrupts_enabled();
+    cpu::interrupt_disable();
+    if(cpu::self()->impl_ptr->next_thread!= nullptr)//get from previous cpu directly
+    {
+        cpu::self()->impl_ptr->current_thread=cpu::self()->impl_ptr->next_thread;
+        cpu::self()->impl_ptr->next_thread= nullptr;
+        setcontext(cpu::self()->impl_ptr->current_thread);
+        //??
+
+    } else
     {
 
 
-
-        cpu::interrupt_disable();
         while(guard.exchange(true)){}
 
-        if(!ready_threads_ptr.empty()) {
-            auto temp = ready_threads_ptr.front();
-            ready_threads_ptr.pop();
-
+        if(ready_threads_ptr.empty())//do nothing
+        {
             guard.store(false);
             cpu::interrupt_enable();
 
-            setcontext(temp);
-        }
-        else
+
+        } else//switch
         {
-            suspended_cpu_ptr.push(cpu::self());
+            ready_threads_ptr.push(cpu::self()->impl_ptr->current_thread);
+            cpu::self()->impl_ptr->current_thread=ready_threads_ptr.front();
+            ready_threads_ptr.pop();
+            swapcontext(
+                    ready_threads_ptr.back(),
+                    cpu::self()->impl_ptr->current_thread);
+
+
+            //??
             guard.store(false);
-            cpu::interrupt_enable_suspend();
+            cpu::interrupt_enable();
         }
+
 
 
 
@@ -47,13 +67,43 @@ void ipi_handler()
 
 
 
+
+    cpu::interrupt_enable();
 }
-void timer_handler()
+
+void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
 {
+    guard.store(false);
+    cpu::interrupt_enable();
 
+    //before
+    func(arg);
+    //after
+    cpu::interrupt_disable();
+    while(guard.exchange(true)){}
+
+    if(ready_threads_ptr.empty())
+    {
+        delete cpu::self()->impl_ptr->current_thread;
+        cpu::self()->impl_ptr->current_thread= nullptr;
+        suspended_cpu_ptr.push(cpu::self());
+        guard.store(false);
+        cpu::interrupt_enable_suspend();
+
+
+    } else//switch
+    {
+        //ready_threads_ptr.push(cpu::self()->impl_ptr->current_thread);
+        delete cpu::self()->impl_ptr->current_thread;
+        cpu::self()->impl_ptr->current_thread=ready_threads_ptr.front();
+        ready_threads_ptr.pop();
+        setcontext(cpu::self()->impl_ptr->current_thread);
+    }
 
 }
 
+
+atomic<bool> init_guard(true);
 
 
 
@@ -61,6 +111,9 @@ void cpu::init(thread_startfunc_t func, void * arg)
 {
     cpu::interrupt_vector_table[IPI]=ipi_handler;
     cpu::interrupt_vector_table[TIMER]=timer_handler;
+    if(!func) {while(init_guard.exchange(true)){} init_guard.store(false)}
+    else  {guard.store(true);init_guard.store(false)}
+
 
 
    // impl_ptr->os_context=new ucontext_t;
@@ -68,23 +121,36 @@ void cpu::init(thread_startfunc_t func, void * arg)
 
     if(func) {
         ucontext_t * temp= new ucontext_t;
-        temp=new ucontext_t;
+        impl_ptr->current_thread=temp;
         temp->uc_stack.ss_sp=new char [STACK_SIZE];
         temp->uc_stack.ss_size=STACK_SIZE;
         temp->uc_stack.ss_flags=0;
         temp->uc_link= nullptr;//TODO
-        makecontext(temp,func,1,arg);
-        cpu::impl_ptr->cpu_state=USER;
+        makecontext(temp,thread_wrapper,2,func,arg);
+        cpu::impl_ptr->current_thread=temp;
+        //cpu::impl_ptr->cpu_state=USER;
+        //cpu::interrupt_enable()
         setcontext(temp);
 
     }
     else
     {
-
         while(guard.exchange(true)){}
-        suspended_cpu_ptr.push(cpu::self());
-        guard.store(false);
-        cpu::interrupt_enable_suspend();
+
+        if(ready_threads_ptr.empty())//do nothing
+        {
+            suspended_cpu_ptr.push(cpu::self());
+            guard.store(false);
+            cpu::interrupt_enable_suspend();
+
+
+        } else//switch
+        {
+            //ready_threads_ptr.push(cpu::self()->impl_ptr->current_thread);
+            cpu::self()->impl_ptr->current_thread=ready_threads_ptr.front();
+            ready_threads_ptr.pop();
+            setcontext(impl_ptr->current_thread);
+        }
     }
 
 //    getcontext(impl_ptr->os_context);
@@ -133,7 +199,8 @@ class cpu::impl
     cpu_state_t  cpu_state=INIT;
     interrrupt_type_t interrrupt_type=NONE;
 
-   // ucontext_t* current_thread;
+    ucontext_t* current_thread= nullptr;
+    ucontext_t* next_thread= nullptr;
     void add_ready_thread(ucontext_t* input_thread)
     {
         //ASSERTION
@@ -144,11 +211,17 @@ class cpu::impl
         while (guard.exchange(true)) {}
 
 
-        ready_threads_ptr.push(input_thread);
-        if(!suspended_cpu_ptr.empty()) {
-            interrrupt_type=NEWTHREAD;
-            suspended_cpu_ptr.front()->interrupt_send();
 
+        if(!suspended_cpu_ptr.empty()) {
+            //interrrupt_type=NEWTHREAD;
+            auto temp=suspended_cpu_ptr.front();
+            suspended_cpu_ptr.pop();
+            temp->impl_ptr->next_thread=input_thread;
+            temp->interrupt_send();
+
+        } else
+        {
+            ready_threads_ptr.push(input_thread);
         }
 
         guard.store(false);
@@ -169,7 +242,7 @@ thread::thread(thread_startfunc_t func, void * arg)
     impl_ptr->context->uc_stack.ss_size=STACK_SIZE;
     impl_ptr->context->uc_stack.ss_flags=0;
     impl_ptr->context->uc_link= nullptr;//TODO
-    makecontext(impl_ptr->context,func,1,arg);
+    makecontext(impl_ptr->context,thread_wrapper,2,func,arg);
     cpu::self()->impl_ptr->add_ready_thread(impl_ptr->context);
 }
 
@@ -260,4 +333,4 @@ public:
 
 };//TODO
 
-//TODO:INSTANCE OF IMPL,
+//TODO:INSTANCE OF IMPL,STATIC
