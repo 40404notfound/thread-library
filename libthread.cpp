@@ -11,8 +11,17 @@ enum interrrupt_type_t {
     NEWTHREAD, NONE
 };
 
+class thread_info
+{
+public:
+
+    ucontext_t * context;
+    mutex * mutex_ptr;
+};
+
 queue<ucontext_t *> ready_threads_ptr;
 queue<cpu *> suspended_cpu_ptr;
+//int num_cpu=0;
 
 void timer_handler();
 
@@ -151,12 +160,14 @@ void cpu::init(thread_startfunc_t func, void *arg) {
     } else {
 
         guard_lock();
+        //num_cpu++;
 
         init_context(&suspend_context);
 
         makecontext(&suspend_context, suspend, 0);
         init_guard.store(false);
     }
+
     if (func) {
         ucontext_t *temp = new ucontext_t;
         impl_ptr->current_thread = temp;
