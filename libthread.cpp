@@ -14,12 +14,24 @@ enum interrrupt_type_t {
 class thread_info
 {
 public:
+    thread_info(ucontext_t * _context,mutex *_mutex_ptr)
+    {
+        context=_context;
+        mutex_ptr=_mutex_ptr;
+    }
+
+    void set(ucontext_t * _context,mutex *_mutex_ptr)
+    {
+        context=_context;
+        mutex_ptr=_mutex_ptr;
+    }
+
 
     ucontext_t * context;
     mutex * mutex_ptr;
 };
 
-queue<ucontext_t *> ready_threads_ptr;
+queue<thread_info> ready_threads_info;
 queue<cpu *> suspended_cpu_ptr;
 //int num_cpu=0;
 
@@ -34,9 +46,9 @@ void set_cpu_context_from_ready_queue();
 void set_cpu_context_from_ready_queue()
 {
 
-    cpu::self()->impl_ptr->current_thread = ready_threads_ptr.front();
-    ready_threads_ptr.pop();
-    setcontext(cpu::self()->impl_ptr->current_thread);
+    cpu::self()->impl_ptr->current_thread = ready_threads_info.front();
+    ready_threads_info.pop();
+    setcontext(cpu::self()->impl_ptr->current_thread.context);
 };
 
 
@@ -76,26 +88,26 @@ void timer_handler() {
     assert_interrupts_enabled();
     guard_lock();
 
-    if (cpu::self()->impl_ptr->next_thread != nullptr)//get from previous cpu directly
+    if (cpu::self()->impl_ptr->next_thread.context != nullptr)//get from previous cpu directly
     {
 
         cpu::self()->impl_ptr->current_thread = cpu::self()->impl_ptr->next_thread;
-        cpu::self()->impl_ptr->next_thread = nullptr;
+        cpu::self()->impl_ptr->next_thread.set(nullptr, nullptr);
         //cpu::self()->impl_ptr->no_guard_after_swap = true;
 
-        setcontext(cpu::self()->impl_ptr->current_thread);
+        setcontext(cpu::self()->impl_ptr->current_thread.context);
 
 
     } else {
 
-        if (!ready_threads_ptr.empty())
+        if (!ready_threads_info.empty())
         {
-            ready_threads_ptr.push(cpu::self()->impl_ptr->current_thread);
-            cpu::self()->impl_ptr->current_thread = ready_threads_ptr.front();
-            ready_threads_ptr.pop();
+            ready_threads_info.push(cpu::self()->impl_ptr->current_thread);
+            cpu::self()->impl_ptr->current_thread = ready_threads_info.front();
+            ready_threads_info.pop();
             swapcontext(
-                    ready_threads_ptr.back(),
-                    cpu::self()->impl_ptr->current_thread);
+                    ready_threads_info.back().context,
+                    cpu::self()->impl_ptr->current_thread.context);
         }
         guard_unlock();
 
@@ -114,20 +126,21 @@ void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
     //after
     guard_lock();
 
-    if (ready_threads_ptr.empty()) {
-        cpu::self()->impl_ptr->previous_stack = (char *) cpu::self()->impl_ptr->current_thread->uc_stack.ss_sp;
-        delete cpu::self()->impl_ptr->current_thread;
-        cpu::self()->impl_ptr->current_thread = nullptr;
+    cpu::self()->impl_ptr->current_thread.mutex_ptr->impl_ptr->real_unlock();
+    if (ready_threads_info.empty()) {
+        cpu::self()->impl_ptr->previous_stack = (char *) cpu::self()->impl_ptr->current_thread.context->uc_stack.ss_sp;
+        delete cpu::self()->impl_ptr->current_thread.context;
+        delete cpu::self()->impl_ptr->current_thread.mutex_ptr;
+        cpu::self()->impl_ptr->current_thread.set(nullptr,nullptr);
 
         guard_unlock_suspend();
 
 
     } else//switch
     {
-        cpu::self()->impl_ptr->previous_stack = (char *) cpu::self()->impl_ptr->current_thread->uc_stack.ss_sp;
-        delete cpu::self()->impl_ptr->current_thread;
-
-
+        cpu::self()->impl_ptr->previous_stack = (char *) cpu::self()->impl_ptr->current_thread.context->uc_stack.ss_sp;
+        delete cpu::self()->impl_ptr->current_thread.context;
+        delete cpu::self()->impl_ptr->current_thread.mutex_ptr;
         set_cpu_context_from_ready_queue();
     }
 
@@ -170,12 +183,12 @@ void cpu::init(thread_startfunc_t func, void *arg) {
 
     if (func) {
         ucontext_t *temp = new ucontext_t;
-        impl_ptr->current_thread = temp;
+        //impl_ptr->current_thread.context = temp;
 
         init_context(temp);
 
         makecontext(temp, thread_wrapper, 2, func, arg);
-        cpu::impl_ptr->current_thread = temp;
+        cpu::impl_ptr->current_thread.set(temp, nullptr);
 
         setcontext(temp);
 
@@ -183,7 +196,7 @@ void cpu::init(thread_startfunc_t func, void *arg) {
 
         guard_lock();
 
-        if (ready_threads_ptr.empty())//do nothing
+        if (ready_threads_info.empty())//do nothing
         {
             guard_unlock_suspend();
 
@@ -204,10 +217,10 @@ class cpu::impl {
 public:
 
     char *previous_stack = nullptr;
-    ucontext_t *current_thread = nullptr;
-    ucontext_t *next_thread = nullptr;
+    thread_info current_thread = thread_info(nullptr, nullptr);
+    thread_info next_thread = thread_info(nullptr, nullptr);
 
-    void add_ready_thread(ucontext_t *input_thread) {
+    void add_ready_thread(thread_info input_thread) {
 
 
         if (!suspended_cpu_ptr.empty()) {
@@ -217,7 +230,7 @@ public:
             temp->interrupt_send();
 
         } else {
-            ready_threads_ptr.push(input_thread);
+            ready_threads_info.push(input_thread);
         }
 
 
@@ -226,28 +239,36 @@ public:
 
 };
 
+
+
 thread::thread(thread_startfunc_t func, void *arg) {
     impl_ptr = new impl();
-    impl_ptr->context = new ucontext_t;
-    init_context(impl_ptr->context);
-    makecontext(impl_ptr->context, thread_wrapper, 2, func, arg);
+    impl_ptr->info.context = new ucontext_t;
+    impl_ptr->info.mutex_ptr=new mutex;
+    init_context(impl_ptr->info.context);
+    makecontext(impl_ptr->info.context, thread_wrapper, 2, func, arg);
 
     guard_lock();
-    cpu::self()->impl_ptr->add_ready_thread(impl_ptr->context);
+    impl_ptr->info.mutex_ptr->impl_ptr->real_lock();
+    cpu::self()->impl_ptr->add_ready_thread(impl_ptr->info);//TODO: CHECK
     guard_unlock();
 }
 
 thread::~thread() { delete impl_ptr; }
 thread::join() {
 
+    this->impl_ptr->info.mutex_ptr->lock();
+    this->impl_ptr->info.mutex_ptr->unlock();
 
-}//TODO
+
+
+}
 void thread::yield() {
     ipi_handler();
 }
 class thread::impl {
 public:
-    ucontext_t *context;
+    thread_info info;
 };
 
 mutex::mutex() { impl_ptr = new impl(); }
@@ -276,14 +297,13 @@ class mutex::impl {
 public:
 
     bool locked = false;
-    queue<ucontext_t *> mutex_queue;
+    queue<thread_info> mutex_queue;
     void real_unlock()
     {
         assert(locked);
 
         locked = false;
         if (!mutex_queue.empty()) {
-            while (guard.exchange(true)) {}
             cpu::self()->impl_ptr->add_ready_thread(mutex_queue.front());
             mutex_queue.pop();
             locked = true;
@@ -296,16 +316,16 @@ public:
     {
         if (locked) {
             mutex_queue.push(cpu::self()->impl_ptr->current_thread);//add to queue
-            cpu::self()->impl_ptr->current_thread = nullptr;
+            cpu::self()->impl_ptr->current_thread.set(nullptr, nullptr);
 
-            if (ready_threads_ptr.empty()) {
+            if (ready_threads_info.empty()) {
                 suspended_cpu_ptr.push(cpu::self());
                 guard.store(false);
-                swapcontext(mutex_queue.back(), &suspend_context);
+                swapcontext(mutex_queue.back().context, &suspend_context);
             } else {
-                cpu::self()->impl_ptr->current_thread = ready_threads_ptr.front();
-                ready_threads_ptr.pop();
-                swapcontext(mutex_queue.back(), cpu::self()->impl_ptr->current_thread);
+                cpu::self()->impl_ptr->current_thread = ready_threads_info.front();
+                ready_threads_info.pop();
+                swapcontext(mutex_queue.back().context, cpu::self()->impl_ptr->current_thread.context);
             }
 
 
@@ -332,17 +352,17 @@ void cv::wait(mutex &input_mutex) {
 
 
     impl_ptr->cv_queue.push(cpu::self()->impl_ptr->current_thread);
-    cpu::self()->impl_ptr->current_thread=nullptr;
-    if(ready_threads_ptr.empty()) {
+    cpu::self()->impl_ptr->current_thread.set(nullptr, nullptr);
+    if(ready_threads_info.empty()) {
         guard.store(false);
-        swapcontext(impl_ptr->cv_queue.back(), &suspend_context);
+        swapcontext(impl_ptr->cv_queue.back().context, &suspend_context);
     }
     else
     {
         impl_ptr->cv_queue.push(cpu::self()->impl_ptr->current_thread);
-        cpu::self()->impl_ptr->current_thread=ready_threads_ptr.front();
-        ready_threads_ptr.pop();
-        swapcontext(impl_ptr->cv_queue.back(),cpu::self()->impl_ptr->current_thread);
+        cpu::self()->impl_ptr->current_thread=ready_threads_info.front();
+        ready_threads_info.pop();
+        swapcontext(impl_ptr->cv_queue.back().context,cpu::self()->impl_ptr->current_thread.context);
     }
 
 
@@ -369,9 +389,9 @@ void cv::broadcast()
 };
 class cv::impl {
 public:
-    queue<ucontext_t *> cv_queue;
-    atomic<bool> guard = atomic<bool>(false);
+    queue<thread_info> cv_queue;
+    //atomic<bool> guard = atomic<bool>(false);
 
 };
 
-//TODO:STATIC,EXIT
+//TODO:How to delete suspendcontext?
