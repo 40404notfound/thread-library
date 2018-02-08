@@ -2,6 +2,7 @@
 #include "thread.h"
 #include <queue>
 #include <ucontext.h>
+#include <iostream>
 
 using namespace std;
 
@@ -57,7 +58,10 @@ class cpu::impl{
 public:
 
 
-	impl() {}
+	impl()
+	{
+		
+	}
 	char *previous_stack = nullptr;
 	thread_info current_thread = thread_info(nullptr, nullptr);
 	thread_info next_thread = thread_info(nullptr, nullptr);
@@ -73,6 +77,7 @@ public:
 
 		}
 		else {
+			assert(input_thread.context != nullptr);
 			ready_threads_info.push(input_thread);
 		}
 
@@ -204,8 +209,12 @@ void timer_handler() {
 
         if (!ready_threads_info.empty())
         {
+			//if (ready_threads_info.size() == 12)
+				//printf("hahah");
+			assert(cpu::self()->impl_ptr->current_thread.context != nullptr);
             ready_threads_info.push(cpu::self()->impl_ptr->current_thread);
             cpu::self()->impl_ptr->current_thread = ready_threads_info.front();
+			
             ready_threads_info.pop();
             swapcontext(
                     ready_threads_info.back().context,
@@ -373,16 +382,18 @@ void cv::wait(mutex &input_mutex) {
     input_mutex.impl_ptr->real_unlock();//make atomic
 
 
-
+	assert(cpu::self()->impl_ptr->current_thread.context != nullptr);
     impl_ptr->cv_queue.push(cpu::self()->impl_ptr->current_thread);
     cpu::self()->impl_ptr->current_thread.set(nullptr, nullptr);
     if(ready_threads_info.empty()) {
+		suspended_cpu_ptr.push(cpu::self());
         guard.store(false);
+		
         swapcontext(impl_ptr->cv_queue.back().context, &suspend_context);
     }
     else
     {
-        impl_ptr->cv_queue.push(cpu::self()->impl_ptr->current_thread);
+        //impl_ptr->cv_queue.push(cpu::self()->impl_ptr->current_thread);
         cpu::self()->impl_ptr->current_thread=ready_threads_info.front();
         ready_threads_info.pop();
         swapcontext(impl_ptr->cv_queue.back().context,cpu::self()->impl_ptr->current_thread.context);
@@ -397,14 +408,20 @@ void cv::wait(mutex &input_mutex) {
 void cv::signal()
 {
     guard_lock();
-    cpu::self()->impl_ptr->add_ready_thread(impl_ptr->cv_queue.front());
-    impl_ptr->cv_queue.pop();
+	if (!impl_ptr->cv_queue.empty())
+	{
+
+		assert(impl_ptr->cv_queue.front().context != nullptr);
+		cpu::self()->impl_ptr->add_ready_thread(impl_ptr->cv_queue.front());
+		impl_ptr->cv_queue.pop();
+	}
     guard_unlock();
 };
 void cv::broadcast()
 {
     guard_lock();
     while(!impl_ptr->cv_queue.empty()) {
+		assert(impl_ptr->cv_queue.front().context != nullptr);
         cpu::self()->impl_ptr->add_ready_thread(impl_ptr->cv_queue.front());
         impl_ptr->cv_queue.pop();
     }
