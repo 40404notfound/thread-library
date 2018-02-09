@@ -102,7 +102,7 @@ public:
 
 void reset_suspend_context()
 {
-	delete[] cpu::self()->impl_ptr->suspend_context.uc_stack.ss_sp;
+	//delete[] cpu::self()->impl_ptr->suspend_context.uc_stack.ss_sp;
 	init_context(&cpu::self()->impl_ptr->suspend_context);
 	makecontext(&cpu::self()->impl_ptr->suspend_context, suspend, 0);
 }
@@ -288,6 +288,7 @@ void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
 void suspend() {
 	assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
 	//printf("@CPU %p suspended (suspend_context)\n", cpu::self());
+	cpu::self()->impl_ptr->previous_stack = (char*)cpu::self()->impl_ptr->suspend_context.uc_stack.ss_sp;
 	suspended_cpu_ptr.push(cpu::self());
 	guard.store(false);//??
 	//assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
