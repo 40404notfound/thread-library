@@ -39,6 +39,7 @@ void delete_previous_context_if_needed();
 void guard_lock();
 void guard_unlock();
 void set_cpu_context_from_ready_queue();
+void suspend();
 
 void init_context(ucontext_t* input)
 {
@@ -99,6 +100,13 @@ public:
 	thread_info info;
 };
 
+void reset_suspend_context()
+{
+	delete[] cpu::self()->impl_ptr->suspend_context.uc_stack.ss_sp;
+	init_context(&cpu::self()->impl_ptr->suspend_context);
+	makecontext(&cpu::self()->impl_ptr->suspend_context, suspend, 0);
+}
+
 class mutex::impl {
 public:
 	impl() {}
@@ -117,7 +125,7 @@ public:
 
 	}
 
-
+	
 	void real_lock()
 	{
 		if (locked) {
@@ -127,6 +135,9 @@ public:
 			if (ready_threads_info.empty()) {
 				
 				assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
+
+				reset_suspend_context();
+
 				swapcontext(mutex_queue.back().context, &cpu::self()->impl_ptr->suspend_context);
 			}
 			else {
@@ -287,23 +298,19 @@ void suspend() {
 
 void cpu::init(thread_startfunc_t func, void *arg) {
     impl_ptr = new impl();
+	init_context(&impl_ptr->suspend_context);
 
+	makecontext(&impl_ptr->suspend_context, suspend, 0);
     cpu::interrupt_vector_table[IPI] = ipi_handler;
     cpu::interrupt_vector_table[TIMER] = timer_handler;
     if (!func) {
         while (init_guard.exchange(true)) {}
         init_guard.store(false);
-        init_context(&impl_ptr->suspend_context);
-
-        makecontext(&impl_ptr->suspend_context, suspend, 0);
+        
     } else {
 
 		guard.store(true);
-        //num_cpu++;
-
-        init_context(&impl_ptr->suspend_context);
-
-        makecontext(&impl_ptr->suspend_context, suspend, 0);
+        //num_cpu++
         init_guard.store(false);
     }
 
@@ -413,7 +420,7 @@ void cv::wait(mutex &input_mutex) {
 
 		assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
         
-		
+		reset_suspend_context();
         swapcontext(impl_ptr->cv_queue.back().context, &cpu::self()->impl_ptr->suspend_context);
     }
     else
