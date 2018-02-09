@@ -71,6 +71,6 @@ void start(int arg) {
 }
 
 int main(int argc ,char ** argv) {
-	cpu::boot(3, (thread_startfunc_t)start, (void*)100, true, true, atoi(argv[1]));
+	cpu::boot(3, (thread_startfunc_t)start, (void*)100, false, true, atoi(argv[1]));
 	//cpu::boot(3, (thread_startfunc_t)start, (void*)100, false, true, 13);
 }

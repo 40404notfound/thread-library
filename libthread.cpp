@@ -29,7 +29,7 @@ public:
 queue<thread_info> ready_threads_info;
 queue<cpu *> suspended_cpu_ptr;
 atomic<bool> init_guard(true);
-ucontext suspend_context;
+//ucontext suspend_context;
 //int num_cpu=0;
 
 void timer_handler();
@@ -65,6 +65,7 @@ public:
 	char *previous_stack = nullptr;
 	thread_info current_thread = thread_info(nullptr, nullptr);
 	thread_info next_thread = thread_info(nullptr, nullptr);
+    ucontext_t suspend_context;
 
 	void add_ready_thread(thread_info input_thread) {
 
@@ -73,10 +74,10 @@ public:
 			auto temp = suspended_cpu_ptr.front();
 
 			suspended_cpu_ptr.pop();
-			printf("@thread %p send to %p (add_ready_thread)\n", input_thread.context, temp);
+			//printf("@thread %p send to %p (add_ready_thread)\n", input_thread.context, temp);
 			temp->impl_ptr->next_thread = input_thread;
 
-			printf("+CPU %p activated(add_ready_thread)\n", temp);
+			//printf("+CPU %p activated(add_ready_thread)\n", temp);
 
 			temp->interrupt_send();
 
@@ -126,7 +127,7 @@ public:
 			if (ready_threads_info.empty()) {
 				
 				assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
-				swapcontext(mutex_queue.back().context, &suspend_context);
+				swapcontext(mutex_queue.back().context, &cpu::self()->impl_ptr->suspend_context);
 			}
 			else {
 				cpu::self()->impl_ptr->current_thread = ready_threads_info.front();
@@ -178,7 +179,7 @@ void guard_unlock()
 
 }
 void guard_unlock_suspend(){
-	printf("@CPU %p suspended(guard_unlock_suspend)\n", cpu::self());
+	//printf("@CPU %p suspended(guard_unlock_suspend)\n", cpu::self());
 suspended_cpu_ptr.push(cpu::self());
 guard.store(false);
 cpu::interrupt_enable_suspend();
@@ -203,11 +204,11 @@ void delete_previous_context_if_needed() {
 void timer_handler() {
     assert_interrupts_enabled();
     guard_lock();
-	printf("@timer_handler called by %p\n", cpu::self());
+	//printf("@timer_handler called by %p\n", cpu::self());
     if (cpu::self()->impl_ptr->next_thread.context != nullptr)//get from previous cpu directly
     {
 		
-		printf("+thread %p received by %p \n",cpu::self()->impl_ptr->next_thread.context, cpu::self());
+		//printf("+thread %p received by %p \n",cpu::self()->impl_ptr->next_thread.context, cpu::self());
 
         cpu::self()->impl_ptr->current_thread = cpu::self()->impl_ptr->next_thread;
         cpu::self()->impl_ptr->next_thread.set(nullptr, nullptr);
@@ -220,7 +221,7 @@ void timer_handler() {
 
         if (!ready_threads_info.empty())
         {
-			printf("+thread %p exchanged to %p by %p \n",cpu::self()->impl_ptr->current_thread.context,ready_threads_info.front().context, cpu::self());
+			//printf("+thread %p exchanged to %p by %p \n",cpu::self()->impl_ptr->current_thread.context,ready_threads_info.front().context, cpu::self());
 			//if (ready_threads_info.size() == 12)
 				//printf("hahah");
 			assert(cpu::self()->impl_ptr->current_thread.context != nullptr);
@@ -275,7 +276,7 @@ void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
 
 void suspend() {
 	assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
-	printf("@CPU %p suspended (suspend_context)\n", cpu::self());
+	//printf("@CPU %p suspended (suspend_context)\n", cpu::self());
 	suspended_cpu_ptr.push(cpu::self());
 	guard.store(false);//??
 	//assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
@@ -292,14 +293,17 @@ void cpu::init(thread_startfunc_t func, void *arg) {
     if (!func) {
         while (init_guard.exchange(true)) {}
         init_guard.store(false);
+        init_context(&impl_ptr->suspend_context);
+
+        makecontext(&impl_ptr->suspend_context, suspend, 0);
     } else {
 
 		guard.store(true);
         //num_cpu++;
 
-        init_context(&suspend_context);
+        init_context(&impl_ptr->suspend_context);
 
-        makecontext(&suspend_context, suspend, 0);
+        makecontext(&impl_ptr->suspend_context, suspend, 0);
         init_guard.store(false);
     }
 
@@ -410,7 +414,7 @@ void cv::wait(mutex &input_mutex) {
 		assert(cpu::self()->impl_ptr->next_thread.context == nullptr);
         
 		
-        swapcontext(impl_ptr->cv_queue.back().context, &suspend_context);
+        swapcontext(impl_ptr->cv_queue.back().context, &cpu::self()->impl_ptr->suspend_context);
     }
     else
     {
@@ -450,6 +454,6 @@ void cv::broadcast()
 };
 
 
-//TODO:How to delete suspendcontext?£¬static
+//TODO:How to delete suspendcontext?ï¿½ï¿½static
 
-//TODO:seperate two interrupter,£¡£¡£¡fix small bug£¡£¡£¡
+//TODO:seperate two interrupter,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½fix small bugï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
