@@ -70,7 +70,7 @@ void start(int arg) {
 
 }
 
-int main(int argc ,char ** argv) {
+int main2(int argc ,char ** argv) {
 	cpu::boot(3, (thread_startfunc_t)start, (void*)100, false, true, atoi(argv[1]));
 	//cpu::boot(3, (thread_startfunc_t)start, (void*)100, false, true, 13);
 }

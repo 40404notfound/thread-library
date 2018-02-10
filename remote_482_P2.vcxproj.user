@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <PreLaunchCommand>handle SIGUSR1 nostop noprint</PreLaunchCommand>
+    <AdditionalDebuggerCommands>handle SIGUSR1 nostop noprint</AdditionalDebuggerCommands>
+    <DebuggerFlavor>LinuxDebugger</DebuggerFlavor>
+    <RemoteDebuggerCommandArguments>5</RemoteDebuggerCommandArguments>
+    <RemoteDebugTarget>1517839;45.77.110.84 (username=, port=22, authentication=Password)</RemoteDebugTarget>
+  </PropertyGroup>
+</Project>

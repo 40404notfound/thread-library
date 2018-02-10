@@ -35,7 +35,7 @@ cv requestcv;
 cv startcv;
 
 
-int test1(int argc, char ** argv) {
+int main(int argc, char ** argv) {
 
 	maxqueue = 3;
 	
@@ -45,7 +45,7 @@ int test1(int argc, char ** argv) {
 		filename.push_back("/root/projects/remote_482_P2/disk.in3");
 		filename.push_back("/root/projects/remote_482_P2/disk.in4");
 	
-	cpu::boot(3,(thread_startfunc_t)start, (void *)0, 0,0,0);
+	cpu::boot(3,(thread_startfunc_t)start, (void *)0, 1,1,50);
 
 }
 
