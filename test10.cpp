@@ -4,26 +4,29 @@
 
 using namespace std;
 int writer_num = 0, reader_num = 0;
-mutex rw_lock;
+mutex lock;
 cv waiting_readers, waiting_writers;
 
 
 void reader_start(int id)
 {
-	rw_lock.lock();
+	lock.lock();
 	while (writer_num > 0)
 	{
-		waiting_readers.wait(rw_lock);
+		
+		waiting_readers.wait(lock);
 	}
 	//printf("Reader %d start reading\n", arg);
 	cout << "Reader " << id << " start reading\n";
 	reader_num++;
-	rw_lock.unlock();
+	lock.unlock();
+
+
 }
 
 void reader_finish(int id)
 {
-	rw_lock.lock();
+	lock.lock();
 	reader_num--;
 	//printf("Reader %d finish reading\n", arg);
 	cout << "Reader " << id << " finish reading\n";
@@ -31,30 +34,30 @@ void reader_finish(int id)
 	{
 		waiting_writers.signal();
 	}
-	rw_lock.unlock();
+	lock.unlock();
 }
 
 void writer_start(int id)
 {
-	rw_lock.lock();
+	lock.lock();
 	while (reader_num > 0 || writer_num > 0)
 	{
-		waiting_writers.wait(rw_lock);
+		waiting_writers.wait(lock);
 	}
 	cout << "Writer " << id << " start writing\n";
 	writer_num++;
-	rw_lock.unlock();
+	lock.unlock();
 }
 
 void writer_finish(int id)
 {
-	rw_lock.lock();
+	lock.lock();
 	writer_num--;
 	//printf("Writer %d finish writing\n", arg);
 	cout << "Writer " << id << " finish writing\n";
 	waiting_readers.broadcast();
 	waiting_writers.signal();
-	rw_lock.unlock();
+	lock.unlock();
 }
 
 void read(int arg)
