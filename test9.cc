@@ -35,7 +35,7 @@ cv requestcv;
 cv startcv;
 
 
-int main(int argc, char ** argv) {
+int main9(int argc, char ** argv) {
 
 	maxqueue = 3;
 	

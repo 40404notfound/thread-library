@@ -266,8 +266,8 @@ void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
 		cpu::self()->impl_ptr->current_thread.mutex_ptr->impl_ptr->real_unlock();
     if (ready_threads_info.empty()) {
         cpu::self()->impl_ptr->previous_stack = (char *) cpu::self()->impl_ptr->current_thread.context->uc_stack.ss_sp;
-        delete cpu::self()->impl_ptr->current_thread.context;
-        delete cpu::self()->impl_ptr->current_thread.mutex_ptr;
+        //delete cpu::self()->impl_ptr->current_thread.context;
+       // delete cpu::self()->impl_ptr->current_thread.mutex_ptr;
         cpu::self()->impl_ptr->current_thread.set(nullptr,nullptr);
 
         guard_unlock_suspend();
@@ -276,8 +276,8 @@ void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
     } else//switch
     {
         cpu::self()->impl_ptr->previous_stack = (char *) cpu::self()->impl_ptr->current_thread.context->uc_stack.ss_sp;
-        delete cpu::self()->impl_ptr->current_thread.context;
-        delete cpu::self()->impl_ptr->current_thread.mutex_ptr;
+        //delete cpu::self()->impl_ptr->current_thread.context;
+       // delete cpu::self()->impl_ptr->current_thread.mutex_ptr;
         set_cpu_context_from_ready_queue();
     }
 
@@ -366,9 +366,13 @@ thread::thread(thread_startfunc_t func, void *arg) {
 
 thread::~thread() { delete impl_ptr; }
 void thread::join() {
+	guard_lock();
+	auto backup = this->impl_ptr->info.mutex_ptr;
 
-    this->impl_ptr->info.mutex_ptr->lock();
-    this->impl_ptr->info.mutex_ptr->unlock();
+
+		guard_unlock();
+    backup->lock();
+    backup->unlock();
 
 
 
