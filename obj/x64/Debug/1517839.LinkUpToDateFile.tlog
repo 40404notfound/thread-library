@@ -1,1 +1,1 @@
-g++ -o "/root/projects/remote_482_P2/bin/x64/Debug/remote_482_P2.out" -Wl,--no-undefined -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack /root/projects/remote_482_P2/libcpu.o -ldl -pthread /root/projects/remote_482_P2/obj/x64/Debug/test10.o /root/projects/remote_482_P2/obj/x64/Debug/thread.o
+g++ -o "/root/projects/remote_482_P2/bin/x64/Debug/remote_482_P2.out" -Wl,--no-undefined -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack /root/projects/remote_482_P2/libcpu.o -ldl -pthread /root/projects/remote_482_P2/obj/x64/Debug/libthread.o /root/projects/remote_482_P2/obj/x64/Debug/test12.o
