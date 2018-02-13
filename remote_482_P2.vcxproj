@@ -33,9 +33,8 @@
     <ClInclude Include="thread.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="libthread.cpp" />
-    <ClCompile Include="test10.cpp" />
-    <ClCompile Include="test11.cpp" />
+    <ClCompile Include="test6.cpp" />
+    <ClCompile Include="thread.cc" />
   </ItemGroup>
   <ItemGroup>
     <Object Include="libcpu.o" />

@@ -32,7 +32,7 @@ void start2(int arg) {
 
 }
 
-int main()
+int main2()
 {
 	cpu::boot(1, (thread_startfunc_t)start2, (void *)100, false, false, 114514);
 }

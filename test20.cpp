@@ -87,6 +87,6 @@ void start(int arg)
 
 int main(int argc, char** argv)
 {
-	cpu::boot(1, (thread_startfunc_t)start, (void*)114, false, false, 5);
+	cpu::boot(1, (thread_startfunc_t)start, (void*)50, false, false, 5);
 	//cpu::boot(3, (thread_startfunc_t)start, (void*)100, false, true, 13);
 }
