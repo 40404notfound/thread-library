@@ -13,6 +13,8 @@ int service(void * parameter);
 int maxqueuesize();
 bool notinqueue(int index);
 bool loadfinish = 0;
+int counter1;
+int counter2;
 
 vector<thread *> threads;
 
@@ -43,7 +45,12 @@ void truestart(int in)
 void start(int parameter)
 {
 	int para = (int)parameter;
-	if (rand()%100==99) return;
+	m.lock();
+	
+	if (counter1++ == 100) { m.unlock(); return; }
+	
+	m.unlock();
+
 	m.lock();
 	cout << para << "b" << endl;
 	m.unlock();
@@ -59,7 +66,7 @@ void start(int parameter)
 
 			m.lock();
 			if(loadfinish != 1) cout << para << "hacking" << endl;
-			if (rand() % 100 == 98 && loadfinish != 1) { loadfinish = 1; cout << para << "success" << endl;}
+			if (counter2++==100 && loadfinish != 1) { loadfinish = 1; cout << para << "success" << endl;}
 			thread::yield();
 			
 			m.unlock();

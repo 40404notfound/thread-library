@@ -33,7 +33,7 @@
     <ClInclude Include="thread.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="test6.cpp" />
+    <ClCompile Include="test10.cc" />
     <ClCompile Include="thread.cc" />
   </ItemGroup>
   <ItemGroup>

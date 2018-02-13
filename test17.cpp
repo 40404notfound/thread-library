@@ -83,7 +83,7 @@ int requester(void * parameter)
 
 	for (int i = 0; i<size; i++)
 	{
-		t.push(rand() % 1000);
+		t.push((ID*ID*ID*ID*ID + (i*i)) % 1009);
 	}
 
 

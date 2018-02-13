@@ -23,7 +23,7 @@ void start(int arg) {
 		int i = 0;
 		while (1)
 		{
-			cout << "created " << i << endl;
+			//cout << "created " << i << endl;
 			new thread((thread_startfunc_t)func1, (void*)10);
 			i++;
 		}

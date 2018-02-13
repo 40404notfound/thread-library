@@ -14,8 +14,8 @@ void func2(void* mtx) {
 }
 
 void start(void*) {
-    thread t1{nullptr, &mtx1};
-    thread t2{nullptr, &mtx1};
+    thread t1{func2, &mtx1};
+    thread t2{func2, &mtx1};
     t2.join();
     t1.join();
 }

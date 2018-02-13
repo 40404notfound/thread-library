@@ -3,5 +3,7 @@
   Copying sources remotely to '45.77.110.84'
   Starting remote build
   Compiling sources:
+  test10.cc
+C:\Users\qnmlgb\source\repos\remote_482_P2\remote_482_P2\test10.cc(18,31): warning : cast to pointer from integer of different size [-Wint-to-pointer-cast]
   Linking objects
   remote_482_P2.vcxproj -> C:\Users\qnmlgb\source\repos\remote_482_P2\remote_482_P2\bin\x64\Debug\remote_482_P2.out
