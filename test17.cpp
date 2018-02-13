@@ -10,7 +10,7 @@ void print(string in);
 int requester(void * parameter);
 int start(void * parameter);
 int service(void * parameter);
-int maxqueuesize();
+std::size_t maxqueuesize();
 bool notinqueue(int index);
 
 
@@ -64,7 +64,7 @@ int start(void * parameter)
 
 
 
-
+	return 0;
 
 }
 
@@ -178,7 +178,7 @@ int service(void * parameter)
 
 		int min = -1;
 		int minindex = -1;
-		for (int i = 0; i<tracks.size(); i++)
+		for (std::size_t i = 0; i<tracks.size(); i++)
 		{
 			if (min == -1)
 			{
@@ -212,7 +212,7 @@ int service(void * parameter)
 			threadcounter--;
 
 		bool allout = 1;
-		for (int i = 0; i<islast.size(); i++)
+		for (std::size_t i = 0; i<islast.size(); i++)
 			if (islast[i] == 0)
 			{
 				allout = 0;
@@ -237,7 +237,7 @@ bool notinqueue(int ID)
 {
 
 
-	for (int i = 0; i<tracks.size(); i++)
+	for (std::size_t i = 0; i<tracks.size(); i++)
 	{
 		if (tracks[i].second == ID)
 			return 0;
@@ -247,7 +247,7 @@ bool notinqueue(int ID)
 }
 
 
-int maxqueuesize()
+std::size_t maxqueuesize()
 {
 	return min(threadcounter, maxqueue);
 }

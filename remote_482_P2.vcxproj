@@ -34,7 +34,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="libthread.cpp" />
-    <ClCompile Include="test12.cpp" />
+    <ClCompile Include="test17.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Object Include="libcpu.o" />
