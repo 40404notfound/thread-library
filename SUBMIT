@@ -4,4 +4,4 @@ test16.cpp
 test17.cpp
 test21.cpp
 test22.cpp
-thread.cc
+thread.cpp
