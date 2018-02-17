@@ -154,13 +154,19 @@ public:
 void idle_func(void*) {
     lock();
     while (true) {
+		//to
         thread::impl* ti = cpu::impl::current();
         idle_queue.push(ti);
-        cpu::impl::run_next();
+        cpu::impl::run_next();//userthread
         suspended_queue.push(cpu::self());
+		//void guard_unlock_suspend()
+    	//{
         guard.store(0, std::memory_order_seq_cst);
-        cpu::interrupt_enable_suspend();
-        lock();
+    	cpu::interrupt_enable_suspend();
+        //}
+    	//wakeup
+    	lock();
+		//jump
     }
 }
 
@@ -228,7 +234,12 @@ void thread::impl::thread_start(void(*fn)(void*), void* arg) {
     delete last_free_thread;
     last_free_thread = nullptr;
     unlock();
+
+
     fn(arg);
+
+
+
     lock();
     auto current_thd = cpu::impl::current();
     while (!current_thd->join_thd.empty()) {

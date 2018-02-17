@@ -6,5 +6,7 @@
     <DebuggerFlavor>LinuxDebugger</DebuggerFlavor>
     <RemoteDebuggerCommandArguments>5</RemoteDebuggerCommandArguments>
     <RemoteDebugTarget>1517839;45.77.110.84 (username=, port=22, authentication=Password)</RemoteDebugTarget>
+    <DebuggerType>NativeOnly</DebuggerType>
+    <RemoteDebuggingMode>gdbserver</RemoteDebuggingMode>
   </PropertyGroup>
 </Project>

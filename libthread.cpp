@@ -263,9 +263,9 @@ void thread_wrapper(thread_startfunc_t func, void *arg)//TODO
 		thread_status.erase(CURRENT_THREAD.context);
 		not_returned.erase(CURRENT_THREAD.context);
 	}
-	CURRENT_THREAD.clear();
 	delete CURRENT_THREAD.joined;
 	delete CURRENT_THREAD.context;
+	CURRENT_THREAD.clear();
 	RUN_NEXT_THREAD();
 
 }
