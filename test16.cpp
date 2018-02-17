@@ -10,7 +10,7 @@ void print(string in);
 int requester(void * parameter);
 int start(void * parameter);
 int service(void * parameter);
-int maxqueuesize();
+size_t maxqueuesize();
 bool notinqueue(int index);
 
 
@@ -52,7 +52,7 @@ int start(void * parameter)
 	threadcounter = numoffile;
 	for (int i = 0; i<numoffile; i++)
 	{
-		thread((thread_startfunc_t)requester, (void *)i);
+		thread((thread_startfunc_t)requester, (void *)(long long int)i);
 	}
 
 
@@ -65,7 +65,7 @@ int start(void * parameter)
 
 
 
-
+	return 0;
 }
 
 
@@ -81,9 +81,9 @@ int requester(void * parameter)
 	queue<int> t;
 
 
-	for (int i = 0; i<size; i++)
+	for (size_t i = 0; i<(size_t)size; i++)
 	{
-		t.push((ID*ID*ID*ID*ID+(i*i))%1009);
+		t.push((int)(((size_t)(ID*ID*ID*ID*ID)+(i*i))%1009));
 	}
 
 
@@ -118,7 +118,7 @@ int requester(void * parameter)
 		queuemutex.lock();
 
 		print(to_string(ID) + "lock");
-		while (tracks.size() >= maxqueuesize())
+		while (tracks.size() >= (size_t)maxqueuesize())
 		{
 
 			print(to_string(ID) + "wait");
@@ -181,7 +181,7 @@ int service(void * parameter)
 
 		int min = -1;
 		int minindex = -1;
-		for (int i = 0; i<tracks.size(); i++)
+		for (int i = 0; i<(int)tracks.size(); i++)
 		{
 			if (min == -1)
 			{
@@ -215,7 +215,7 @@ int service(void * parameter)
 			threadcounter--;
 
 		bool allout = 1;
-		for (int i = 0; i<islast.size(); i++)
+		for (int i = 0; i<(int)islast.size(); i++)
 			if (islast[i] == 0)
 			{
 				allout = 0;
@@ -233,14 +233,14 @@ int service(void * parameter)
 		queuemutex.unlock();
 		if (exit) break;
 	}
-
+	return 0;
 }
 
 bool notinqueue(int ID)
 {
 
 
-	for (int i = 0; i<tracks.size(); i++)
+	for (int i = 0; i<(int)tracks.size(); i++)
 	{
 		if (tracks[i].second == ID)
 			return 0;
@@ -250,7 +250,7 @@ bool notinqueue(int ID)
 }
 
 
-int maxqueuesize()
+size_t maxqueuesize()
 {
 	return min(threadcounter, maxqueue);
 }

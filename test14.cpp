@@ -42,7 +42,7 @@ void truestart(int in)
 
 void start(int parameter)
 {
-	int para = (int)parameter;
+	long long int para = (long long int)parameter;
 	if (para == 0) { m.lock(); loadfinish = 1; c.signal(); m.unlock();  return; }
 	m.lock();
 	cout << para << "b" << endl;

@@ -44,7 +44,7 @@ void truestart(int in)
 
 void start(int parameter)
 {
-	int para = (int)parameter;
+	long long int para = (long long int)parameter;
 	m.lock();
 	
 	if (counter1++ == 100) { m.unlock(); return; }

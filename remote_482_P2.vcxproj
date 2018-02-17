@@ -33,18 +33,14 @@
     <ClInclude Include="thread.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="libthread.cpp" />
-    <ClCompile Include="test20.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <Object Include="libcpu.o" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="disk.in0" />
-    <None Include="disk.in1" />
-    <None Include="disk.in2" />
-    <None Include="disk.in3" />
-    <None Include="disk.in4" />
+    <None Include="SUBMIT" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="test21.cpp" />
+    <ClCompile Include="thread.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{151f3335-30b8-48ba-ab36-074ef099c809}</ProjectGuid>

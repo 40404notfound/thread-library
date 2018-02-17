@@ -52,7 +52,7 @@ int start(void * parameter)
 	threadcounter = numoffile;
 	for (int i = 0; i<numoffile; i++)
 	{
-		thread((thread_startfunc_t)requester, (void *)i);
+		thread((thread_startfunc_t)requester, (void *)(long long)i);
 	}
 
 
@@ -81,9 +81,9 @@ int requester(void * parameter)
 	queue<int> t;
 
 
-	for (int i = 0; i<size; i++)
+	for (size_t i = 0; i<(size_t)size; i++)
 	{
-		t.push((ID*ID*ID*ID*ID + (i*i)) % 1009);
+		t.push((int)(((size_t)(ID*ID*ID*ID*ID) + (i*i)) % 1009));
 	}
 
 
@@ -183,14 +183,14 @@ int service(void * parameter)
 			if (min == -1)
 			{
 				min = abs(tracks[i].first - currenttrack);
-				minindex = i;
+				minindex = (int)i;
 			}
 			else
 			{
 				if (abs(tracks[i].first - currenttrack)<min)
 				{
 					min = abs(tracks[i].first - currenttrack);
-					minindex = i;
+					minindex = (int)i;
 				}
 			}
 		}
@@ -230,6 +230,7 @@ int service(void * parameter)
 		queuemutex.unlock();
 		if (exit) break;
 	}
+	return 0;
 
 }
 
