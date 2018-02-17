@@ -11,6 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="thread.cpp" />
-    <ClCompile Include="test21.cpp" />
+    <ClCompile Include="test13.cpp" />
   </ItemGroup>
 </Project>

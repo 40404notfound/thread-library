@@ -39,7 +39,7 @@
     <None Include="SUBMIT" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="test21.cpp" />
+    <ClCompile Include="test13.cpp" />
     <ClCompile Include="thread.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

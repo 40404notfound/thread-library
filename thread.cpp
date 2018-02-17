@@ -1,101 +1,30 @@
 #include "thread.h"
 #include <ucontext.h>
 #include <queue>
-#include <iostream>
-#include <set>
-#include <cassert>
-// not <exception>
 #include <stdexcept>
-#include <cstdlib>
-#include <type_traits>
-
-// @TODO: rewrite into transfer lock style instead of assert outer lock style
-// @TODO: move ctor/operator of mutex/cv, so easy(?)
-
-/*
-// Actually C++14
-template< bool B, class T = void >
-using enable_if_t = typename std::enable_if<B,T>::type;
-
-// Actually C++17
-// Oops, variable template are only supported after C++14
-// template< class T >
-// inline constexpr bool is_pointer_v = std::is_pointer<T>::value;
-
-template <template <typename ...> class C, typename T, typename = enable_if_t<std::is_pointer<T>::value>>
-class DelOnDtor : public C<T> {
-public:
-    ~DelOnDtor() {
-        C<T>& ctner = static_cast<C<T>&>(*this);
-        for (auto it = ctner.begin(); it != ctner.end(); ++it) {
-            delete *it;
-        }
-    }
-};
-
-template <typename T>
-class DelOnDtor<std::queue, T> : public std::queue<T> {
-public:
-    ~DelOnDtor() {
-        std::queue<T>& ctner = static_cast<std::queue<T>&>(*this);
-        while (!ctner.empty()) {
-            T p = ctner.front();
-            delete p;
-            ctner.pop();
-        }
-    }
-};
 
 
-DelOnDtor<std::queue, thread::impl*> ready_queue;
-DelOnDtor<std::queue, thread::impl*> idle_queue;
-*/
-
-std::queue<thread::impl*> ready_queue;
-std::queue<thread::impl*> idle_queue;
-std::queue<cpu*> suspended_queue;
-thread::impl* last_free_thread = nullptr;
+static std::queue<thread::impl*> ready_queue;
+static std::queue<thread::impl*> idle_queue;//the dummy threads when cpu suspend
+static std::queue<cpu*> suspended_queue;
+static thread::impl* last_free_thread = nullptr;
 
 
-/*
-// actually libcpu has this
-void* operator new(size_t size) {
-    void* p = malloc(size);
-    if (!p) {
-        throw std::runtime_error("OOM");
-    }
-    return p;
-}
-*/
-
-void lock()
+static void lock()//packed inter-intra-cpu guard lock
 {
 	cpu::interrupt_disable();
 	while (guard.exchange(1, std::memory_order_seq_cst));
 }
 
-void unlock()
+static void unlock()
 {
 	guard.store(0, std::memory_order_seq_cst);
 	cpu::interrupt_enable();
 }
 
-class lock_guard
-{
-public:
-	lock_guard()
-	{
-		lock();
-	}
-
-	~lock_guard()
-	{
-		unlock();
-	}
-};
 
 // [[enter as locked]]
-void wakeup_one_cpu()
+static void wakeup_one_cpu()
 {
 #ifdef COUT_DEBUG
     std::cout << "wake one\n";
@@ -111,9 +40,9 @@ void wakeup_one_cpu()
 	}
 }
 
-class thread::impl
+class thread::impl //this is the real thread object that get transferred
 {
-	thread* parent;
+	thread* parent;//this is  who create this onject 
 	ucontext_t uc;
 	char stack[STACK_SIZE];
 	std::queue<thread::impl*> join_thd;
@@ -129,6 +58,21 @@ class cpu::impl
 {
 	thread::impl* current_thd = nullptr;
 public:
+
+	class lock_guard //unlock itself automatically even when exception is thrown
+	{
+	public:
+		lock_guard()
+		{
+			lock();
+		}
+
+		~lock_guard()
+		{
+			unlock();
+		}
+	};
+
 	static void run_next()
 	{
 #ifdef COUT_DEBUG
@@ -169,30 +113,30 @@ public:
 };
 
 // boot thread and idle threads are released
-void idle_func(void*)
+static void idle_func(void*)
 {
 	lock();
 	while (true)
 	{
-		//to
 		thread::impl* ti = cpu::impl::current();
 		idle_queue.push(ti);
 		cpu::impl::run_next();//userthread
 		suspended_queue.push(cpu::self());
-		//void guard_unlock_suspend()
+		//void unlock_suspend()
 		//{
 		guard.store(0, std::memory_order_seq_cst);
 		cpu::interrupt_enable_suspend();
 		//}
+
 		//wakeup
+
 		lock();
-		//jump
 	}
 }
 
-void timer_handler()
+static void timer_handler()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	if (!ready_queue.empty())
 	{
 		ready_queue.push(cpu::impl::current());
@@ -200,20 +144,12 @@ void timer_handler()
 	}
 }
 
-void ipi_handler()
+static void ipi_handler()
 {
-	// Just a empty implementation is ok.
+	// Just a empty implementation is ok, further operation will
+	// be done in idle_func(void*).
 }
 
-void atexit_idle_handler()
-{
-	while (!idle_queue.empty())
-	{
-		thread::impl* frt = idle_queue.front();
-		idle_queue.pop();
-		delete frt;
-	}
-}
 
 void cpu::init(thread_startfunc_t fn, void* arg)
 {
@@ -228,8 +164,7 @@ void cpu::init(thread_startfunc_t fn, void* arg)
 	}
 	thread cpu_idle_thread{idle_func, nullptr};
 	lock();
-	// however, atexit cannot release per thread
-	// atexit(atexit_idle_handler);
+	// however, at exit cannot release per thread
 	interrupt_vector_table[cpu::TIMER] = timer_handler;
 	cpu::impl::run_next();
 }
@@ -260,14 +195,14 @@ thread::impl::impl(thread* p, thread_startfunc_t fn, void* arg)
 	}
 }
 
-void thread::impl::thread_start(void (*fn)(void*), void* arg)
+void thread::impl::thread_start(void (*fn)(void*), void* arg) //this is a wrapper of user function
 {
-	delete last_free_thread;
+	delete last_free_thread;//free the memory
 	last_free_thread = nullptr;
 	unlock();
 
 
-	fn(arg);
+	fn(arg);//user function
 
 
 	lock();
@@ -278,16 +213,16 @@ void thread::impl::thread_start(void (*fn)(void*), void* arg)
 		ready_queue.push(parent_thd);
 		wakeup_one_cpu();
 		current_thd->join_thd.pop();
-	}
+	}//handle all queued thread by join method.
 	if (current_thd->parent != nullptr)
 		current_thd->parent->impl_ptr = nullptr;
 	last_free_thread = current_thd;
-	cpu::impl::run_next();
+	cpu::impl::run_next();//all deleting thread procedures finished!
 }
 
 thread::impl::~impl()
 {
-	if (parent != nullptr)
+	if (parent != nullptr)//check the parent exist or not
 	{
 		parent->impl_ptr = nullptr;
 	}
@@ -296,20 +231,20 @@ thread::impl::~impl()
 
 thread::thread(thread_startfunc_t fn, void* arg)
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;//unlock when out of scope it self (even with exception)
 	impl_ptr = new thread::impl{this, fn, arg};
 }
 
 thread::~thread()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	if (this->impl_ptr != nullptr)
 		this->impl_ptr->parent = nullptr;
 }
 
 thread::thread(thread&& other)
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr = other.impl_ptr;
 	other.impl_ptr = nullptr;
 	if (impl_ptr != nullptr)
@@ -320,7 +255,7 @@ thread::thread(thread&& other)
 
 thread& thread::operator=(thread&& other)
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr = other.impl_ptr;
 	other.impl_ptr = nullptr;
 	if (impl_ptr != nullptr)
@@ -332,7 +267,7 @@ thread& thread::operator=(thread&& other)
 
 void thread::join()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	if (this->impl_ptr != nullptr)
 	{
 		this->impl_ptr->join_thd.push(cpu::impl::current());
@@ -342,7 +277,7 @@ void thread::join()
 
 void thread::yield()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	if (!ready_queue.empty())
 	{
 		ready_queue.push(cpu::impl::current());
@@ -387,25 +322,25 @@ public:
 
 mutex::mutex()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr = new mutex::impl;
 }
 
 void mutex::lock()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr->lock();
 }
 
 void mutex::unlock()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr->unlock();
 }
 
 mutex::~mutex()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	delete impl_ptr;
 }
 
@@ -445,30 +380,30 @@ public:
 
 cv::cv()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr = new cv::impl;
 }
 
 cv::~cv()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	delete impl_ptr;
 }
 
 void cv::signal()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr->signal();
 }
 
 void cv::broadcast()
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr->broadcast();
 }
 
 void cv::wait(mutex& mtx)
 {
-	lock_guard lk;
+	cpu::impl::lock_guard lk;
 	impl_ptr->wait(mtx.impl_ptr);
 }
